@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:icici/account_number.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 class Signature extends StatefulWidget {
   const Signature({Key? key}) : super(key: key);
@@ -45,17 +48,72 @@ class _SignatureState extends State<Signature> {
     //Wait 2 seconds before navigating to the next screen
     await Future.delayed(const Duration(seconds: 2));
 
+    var response = prefs.getString('response');
+    //Parse JSON
+    var data = jsonDecode(response!);
+
+    await http
+        .patch(
+            Uri.parse(
+                "https://icici-d69xx.dauqu.host/data/signature/${data["_id"]}"),
+            headers: <String, String>{
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: jsonEncode(<String, String>{
+              "signature": signature,
+            }))
+        .then((value) => {
+              //Set Laoding to false
+              setState(() {
+                loading = false;
+              }),
+
+              //Move to next page
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AccountNumber(),
+                ),
+              )
+            })
+
+        //Navigate to other page
+        .catchError((onError) {
+      print(onError);
+      //Set Loading fase
+      setState(() {
+        loading = false;
+      });
+
+      //Show nackend error in dialog
+      showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text("Error"),
+              content: Text(onError.toString()),
+              actions: [
+                TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text("OK"))
+              ],
+            );
+          });
+    });
+
     setState(() {
       loading = false;
     });
 
     // ignore: use_build_context_synchronously
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const AccountNumber(),
-      ),
-    );
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(
+    //     builder: (context) => const AccountNumber(),
+    //   ),
+    // );
   }
 
   List<String> hintList = ["A", "B", "C", "D", "E", "F", "G", "H"];

