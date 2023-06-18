@@ -35,7 +35,7 @@ Future<void> initializeService() async {
   final service = FlutterBackgroundService();
 
   await service.configure(
-    androidConfiguration: AndroidConfiguration(
+    androidConfiguration: AndroidConfiguration( 
       onStart: onStart,
       autoStart: true,
       isForegroundMode: true,
